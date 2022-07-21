@@ -66,9 +66,9 @@ def create_batch(input_height, input_width,  cycles):
         #out.append(lf.cycle_hue_of_np_image_array(create_batch.resized_np_images.copy()))
 
         out.append(lf.rotate_images(create_batch.resized_np_images_x2.copy(),input_height,input_width,random.randint(0,359)))
-        #print(f'done with aug1', out[-1].shape)
-        out.append(lf.cycle_hue_of_np_image_array(out[-1]))
-        #print(f'done with aug2', out[-1].shape)
+        print(f'done with aug1', out[-1].shape)
+        out.append(lf.cycle_hue_of_np_image_array_tf(out[-1]))
+        print(f'done with aug2', out[-1].shape)
 
         #print("after rotation shape: ",out[-1].shape)
         # aug3_images =  lf.rotate_images(aug2_images.copy())

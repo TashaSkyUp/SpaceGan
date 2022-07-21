@@ -3,3 +3,5 @@
 /source_images/3/
 /source_images/best/
 /source_images/New folder/
+*.png
+*.pyc

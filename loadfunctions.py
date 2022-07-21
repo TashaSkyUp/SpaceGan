@@ -32,7 +32,8 @@ def rgb2hsv(rgb):
     :return: np.ndarray
     """
 
-    rgb = rgb.astype('float')
+    #rgb = rgb.astype('float')
+    rgb = tf.cast(rgb,tf.float64)
     maxv = np.amax(rgb, axis=2)
     maxc = np.argmax(rgb, axis=2)
     minv = np.amin(rgb, axis=2)
@@ -58,7 +59,10 @@ def hsv2rgb(hsv):
     """
 
     hi = np.floor(hsv[..., 0] / 60.0) % 6
-    hi = hi.astype('uint8')
+    
+    #hi = hi.astype('uint8')
+    hi = tf.cast(hi,tf.uint8)
+    
     v = hsv[..., 2].astype('float')
     f = (hsv[..., 0] / 60.0) - np.floor(hsv[..., 0] / 60.0)
     p = v * (1.0 - hsv[..., 1])
@@ -66,6 +70,7 @@ def hsv2rgb(hsv):
     t = v * (1.0 - ((1.0 - f) * hsv[..., 1]))
 
     rgb = np.zeros(hsv.shape)
+                      
     rgb[hi == 0, :] = np.dstack((v, t, p))[hi == 0, :]
     rgb[hi == 1, :] = np.dstack((q, v, p))[hi == 1, :]
     rgb[hi == 2, :] = np.dstack((p, v, t))[hi == 2, :]
@@ -98,35 +103,51 @@ def rotate_np_image(np_image: np.array, i: int):
 
 ##https://stackoverflow.com/a/50906602
 @tf.function
-def _rotate_and_crop(image, output_height, output_width, rotation_degree):
+def _rotate_and_crop(images, output_height, output_width, rotation_degree):
     # Rotate the given image with the given rotation degree
-    from tensorflow_addons.image import rotate
-    with tf.device("/gpu:0"):
-        if rotation_degree != 0:
+    #from tensorflow_addons.image import rotate
+    #with tf.device("/gpu:0"):
+    if rotation_degree != 0:
 
-            image = rotate(image, math.radians(rotation_degree), interpolation='BILINEAR')
+        images = rotate(images, math.radians(rotation_degree), interpolation='BILINEAR')
+        #rects = [_largest_rotated_rect(i.shape[1],
+        #                               i.shape[0],
+        #                               math.radians(rotation_degree)
+        #                              ) for i in images]
+        # fix this to deal with recieving many images.
+        #lrr_width, lrr_height = _largest_rotated_rect(int(output_height / 1), int(output_width / 1),
+        #                                              math.radians(rotation_degree))
 
-            lrr_width, lrr_height = _largest_rotated_rect(int(output_height / 1), int(output_width / 1),
-                                                          math.radians(rotation_degree))
-            lrr_width, lrr_height = _largest_rotated_rect(image.shape[1],image.shape[0],
-                                                          math.radians(rotation_degree))
+        lrr_width, lrr_height = _largest_rotated_rect(images.shape[1],images.shape[0],
+                                                      math.radians(rotation_degree))
 
 
-            frac = float(lrr_height) / output_height
-            # print(rotation_degree)
-            # print(image.shape)
-            # print(lrr_width, lrr_height)
-            # print(frac)
-            if frac < 1:
-                raise ValueError(f'source to small to rotate: {rotation_degree} degrees')
-            cropped_image = tf.image.central_crop(image, .875/frac)
+        frac = float(lrr_height) / output_height
+        # print(rotation_degree)
+        # print(image.shape)
+        # print(lrr_width, lrr_height)
+        # print(frac)
+        #if frac < 1:
+        #    raise ValueError(f'source to small to rotate: {rotation_degree} degrees')
+        cropped_image = tf.image.central_crop(images, .875/frac)
 
-            out_image = tf.image.resize(cropped_image, [output_height, output_width], method=tf.image.ResizeMethod.BILINEAR)
+        out_image = tf.image.resize(cropped_image, [output_height, output_width], method=tf.image.ResizeMethod.BILINEAR)
+        #out_image = images
 
-        else:
-            print('no rotation')
-    return out_image
+    return tf.cast(out_image,tf.float64)
 
+#@tf.function
+def _rotate_and_crop_many(images, output_height, output_width, rotation_degree):
+        def my_rotate_and_crop(a,b):
+            #print (a.shape,b.shape)
+            return _rotate_and_crop(b,output_height,output_width,rotation_degree)
+            #return b
+        ini = np.zeros(shape=(output_height,output_width,3))
+        #print (ini.shape)
+        #print (images.shape)
+        return tf.scan(my_rotate_and_crop,images,ini)
+    #return _rotate_and_crop(images,output_height,output_width,rotation_degree)
+    #return [_rotate_and_crop(i,output_height,output_width,rotation_degree) for i in images]
 
 ## https://stackoverflow.com/a/50906602
 def _largest_rotated_rect(w, h, angle):
@@ -167,11 +188,11 @@ def _largest_rotated_rect(w, h, angle):
 def rotate_images(np_array, height, width, angle):
 
     #pool = Pool(processes=10)
-    lenofarray = np_array.shape[0]
-    print(lenofarray)
-    #args =  zip([np_array] * lenofarray,[height] * lenofarray,[width] * lenofarray,range(lenofarray))
-    args = [ (np_array[i,:,:,:],height,width,np.random.randint(1,179)) for i in range(lenofarray)]
-    results = [np.expand_dims(_rotate_and_crop(i[0],i[1],i[2],i[3]),axis=0) for i in args]
+    #lenofarray = np_array.shape[0]
+    #print(lenofarray)
+    ##args =  zip([np_array] * lenofarray,[height] * lenofarray,[width] * lenofarray,range(lenofarray))
+    #args = [ (np_array[i,:,:,:],height,width,np.random.randint(1,179)) for i in range(lenofarray)]
+    results = _rotate_and_crop_many(np_array,height,width,np.random.randint(1,179))
 
     #args = [(np_array[i, :, :, :], height, width, 0) for i in range(lenofarray)]
     #print(f'args like: {args[0]} of length {len(args)}')
@@ -182,8 +203,8 @@ def rotate_images(np_array, height, width, angle):
     # target_shape = list(np_array.shape)
     # target_shape[0] = 0
     # augmented_images= np.zeros(shape=target_shape)
-
-    return np.concatenate(results)
+    return results
+    #return np.concatenate(results)
     #return np_array
 
 
@@ -494,11 +515,21 @@ def cycle_hue_of_np_image(image: np.array, degrees=None) -> np.array:
     return image
 
 
+def cycle_hue_of_np_image_array_tf(images):    
+    def tmp_cycle(a,b):        
+        return cycle_hue_of_np_image(b,degrees=None)
+    
+    return tf.scan(lambda a,b:tmp_cycle(a,b), images)
+    
+    
 def cycle_hue_of_np_image_array(np_images: np.array) -> np.array:
     """
     cycles the hue of a numpy array of images. use a pool to modify the numpy array in-place
     """
-    pool = Pool(processes=20)
+    np_images= np.array(np_images)
+    from tensorflow.python.ops.numpy_ops import np_config
+    np_config.enable_numpy_behavior()
+    pool = Pool(processes=10)
     my_map = map(np_images.__getitem__, range(len(np_images)))
     my_map = [i.astype(np.uint8) for i in my_map]
     my_map = pool.map(cycle_hue_of_np_image, my_map)
